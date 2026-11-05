@@ -1,0 +1,819 @@
+--- upstream/ALL_IN_ONE_T-Display_S3.ino
++++ firmware/Si4732Traditional/Si4732Traditional.ino
+@@ -4,12 +4,11 @@
+ #include <SI4735.h>
+ #include "Rotary.h"
+ #include "patch_init.h"  // SSB patch for whole SSBRX initialization string
+-#include "HanYiZhongYuanJian16.h"
++#include "TraditionalChinese16.h"
+ #include "orbitronbold16.h"
+ #include "icon.h"
+ #include "FREQFONT.h"
+ #include "NotoMono16.h"
+-#include "esp_sleep.h"
+ //#include "driver/adc.h"
+ #include "Battery.h"
+ const uint16_t size_content = sizeof ssb_patch_content;  // see patch_init.h
+@@ -74,21 +73,23 @@
+ #define EEPROM_SIZE 2048
+ #define STORE_TIME 10000  // Time of inactivity to make the current receiver status writable (10s / 10000 milliseconds).
+ 
+-unsigned char brightness = 50;  //存储方式数值，128为中间值
++constexpr uint8_t MIN_BACKLIGHT = 26;  // Lowest selectable brightness (10%).
++constexpr uint8_t DISPLAY_SETTINGS_VERSION = 1;  // EEPROM byte 12, unused by v0.1.
++uint8_t brightness = 255;
++bool backlightPwmActive = false;
+ // EEPROM - Stroring control variables
+ const uint8_t app_id = 47;  // Useful to check the EEPROM content before processing useful data
+ const int eeprom_address = 0;
+ long storeTime = millis();
+ int savenum = 1;                                         //存储选择
+ int selnum = 1;                                          //读取选择
+-int station[50];                                         //存储电台数组  100显示不下
+-const int storenumber = (sizeof station / sizeof(int));  //实际存储数51 从1开始存储
+-
+-int lcdofftime = 5;  //熄屏时间
+-bool lcdoffed;
++constexpr int storenumber = 50;
++int station[storenumber + 1];  // Preset numbers start at 1.
++
++int lcdofftime = 0;  // Zero keeps the backlight on.
++bool lcdoffed = false;
+ 
+ unsigned long lastActiveTime = 0;  // 最后活动时间记录
+-unsigned long lcdondelaytime = 0;
+ //电池定时获取百分比
+ unsigned long lastSampleTime = 0;  // 记录上次电量百分比采样时间
+ int batteryLevel = 0;              // 存储稳定后的电量值
+@@ -140,7 +141,7 @@
+ int8_t menuIdx = VOLUME;
+ int8_t currentMenuCmd = -1;
+ const uint8_t currentBFOStep = 10;
+-const char *menu[] = { "音量", "步进", "模式", "拍频", "带宽", "增益", "降噪", "波段", "静音", "亮度", "关于", "存储电台", "读取电台", "自动熄屏" };  //增加亮度... , 删除"上搜索", "下搜索"
++const char *menu[] = { "音量", "步進", "模式", "拍頻", "頻寬", "增益", "軟靜音", "波段", "靜音", "亮度", "關於", "儲存電台", "讀取電台", "自動熄屏" };  //增加亮度... , 删除"上搜台", "下搜台"
+ const int lastMenu = (sizeof menu / sizeof(char *)) - 1;
+ 
+ typedef struct
+@@ -288,26 +289,47 @@
+ 
+ 
+ 
++void setBacklight(uint8_t level) {
++  // Drive full brightness and off directly, just as in the display test.
++  if (level > 0 && level < 255) {
++    if (!backlightPwmActive) {
++      backlightPwmActive = ledcAttach(PIN_LCD_BL, 15000, 8);
++    }
++    if (backlightPwmActive && ledcWrite(PIN_LCD_BL, level)) return;
++    brightness = 255;
++    Serial.println("[ZH-TW 0.2.1] backlight PWM failed; using full GPIO brightness");
++  }
++  if (backlightPwmActive) {
++    ledcDetach(PIN_LCD_BL);
++    backlightPwmActive = false;
++  }
++  pinMode(PIN_LCD_BL, OUTPUT);
++  digitalWrite(PIN_LCD_BL, level == 0 ? LOW : HIGH);
++}
++
+ void setup() {
++  Serial.begin(115200);
++  Serial.printf("[ZH-TW 0.2.1] boot flash=%u psram=%u\n",
++                ESP.getFlashChipSize(), ESP.getPsramSize());
+   //SerialBT.begin("SI4732-MINI"); // 蓝牙设备名称
+ 
+   pinMode(PIN_POWER_ON, OUTPUT);
+   digitalWrite(PIN_POWER_ON, HIGH);
++  setBacklight(255);
++  tft.init();
++  tft.setRotation(3);
++  tft.fillScreen(TFT_BLACK);
++  spr.setSwapBytes(true);
++  if (spr.createSprite(320, 170) == nullptr) {
++    Serial.println("[ZH-TW 0.2.1] display buffer allocation failed");
++    tft.setTextColor(TFT_WHITE, TFT_BLACK);
++    tft.setTextDatum(MC_DATUM);
++    tft.loadFont(TraditionalChinese16);
++    tft.drawString("顯示記憶體不足", 160, 85);
++    while (true) delay(100);
++  }
++  Serial.println("[ZH-TW 0.2.1] display_init_done sprite=320x170");
+   Wire.begin(ESP32_I2C_SDA, ESP32_I2C_SCL);
+-
+-  pinMode(PIN_LCD_BL, OUTPUT);
+-  digitalWrite(PIN_LCD_BL, LOW);
+-
+-  tft.begin();
+-  tft.fillScreen(TFT_BLACK);
+-  tft.setRotation(3);
+-  spr.setSwapBytes(true);
+-  spr.createSprite(320, 170);
+-
+-  ledcSetup(0, 15000, 8);        //频率提高后背光底噪消失 原频率2000
+-  ledcAttachPin(PIN_LCD_BL, 0);  //esp 2.x
+-
+-  //ledcAttach(PIN_LCD_BL, 15000, LEDC_TIMER_8_BIT); //背光初始化
+ 
+   // Encoder pins
+   pinMode(ENCODER_PUSH_BUTTON, INPUT_PULLUP);
+@@ -323,10 +345,15 @@
+ 
+   int16_t si4735Addr = rx.getDeviceI2CAddress(RESET_PIN);  // Looks for the I2C bus address and set it.  Returns 0 if error
+ 
++  Serial.printf("[ZH-TW 0.2.1] radio_i2c=0x%02X\n", si4735Addr);
++
+   if (si4735Addr == 0) {
+     tft.setTextSize(2);
+     tft.setTextColor(TFT_RED, TFT_BLACK);
+-    tft.println("Si4735 not detected");
++    tft.setTextSize(1);
++    tft.loadFont(TraditionalChinese16);
++    tft.drawString("未偵測到 Si4732", 160, 85);
++    tft.unloadFont();
+     while (1) ;
+   }
+   rx.setup(RESET_PIN, FM_BAND_TYPE);
+@@ -339,15 +366,7 @@
+ 
+   delay(100);  //300
+ 
+-  EEPROM.begin(EEPROM_SIZE);
+-  
+-  CONV_FACTOR =double( ( EEPROM.read(eeprom_address + 10) << 8 | EEPROM.read(eeprom_address + 11) ) / 1000.0  );    //读取系数高八位
+-
+-  // Checking the EEPROM content
+-  if (EEPROM.read(eeprom_address) == app_id) {
+-    readAllReceiverInformation();
+-  } else
+-    rx.setVolume(volume);
++  readAllReceiverInformation();
+ 
+   useBand();
+   showStatus();
+@@ -355,13 +374,12 @@
+   digitalWrite(AMP_EN, HIGH);
+   rx.setAudioMuteMcuPin(AUDIO_MUTE);
+ 
+-  if (brightness != 0) {
+-    ledcWrite(0, brightness);
+-  } else ledcWrite(0, 50);
++  setBacklight(brightness);
+   
+-  if(CONV_FACTOR>10) CONV_FACTOR=1.7;
+-
+   batteryLevel = getBatteryChargeLevel(CONV_FACTOR);
++  lastActiveTime = millis();
++  Serial.printf("[ZH-TW 0.2.1] ready mode=%s freq=%u volume=%u\n",
++                bandModeDesc[currentMode], currentFrequency, rx.getVolume());
+ }
+ ///////////////////////////////////////////////////////////////以上setup
+ 
+@@ -514,42 +532,67 @@
+ 
+ void savestation(int n)  //存储电台
+ {
+-  int addr_offset;
+-
+-  EEPROM.begin(EEPROM_SIZE);
+-
+-  EEPROM.write(eeprom_address, app_id);                                           // stores the app id;
++  if (n < 1 || n > storenumber || !EEPROM.begin(EEPROM_SIZE)) return;
++
+   EEPROM.write(eeprom_address + 100 + n * 15 + 1, bandIdx);                       // Stores the current band
+   EEPROM.write(eeprom_address + 100 + n * 15 + 2, currentMode);                   // Stores the current Mode (FM / AM / SSB)
+   EEPROM.write(eeprom_address + 100 + n * 15 + 3, (rx.getFrequency() >> 8));      // stores the current Frequency HIGH byte for the band
+   EEPROM.write(eeprom_address + 100 + n * 15 + 4, (rx.getFrequency() & 0xFF));    //stores the current Frequency LOW byte for the band
+   EEPROM.write(eeprom_address + 100 + n * 15 + 5, band[bandIdx].currentStepIdx);  // Stores current step of the band
+   EEPROM.write(eeprom_address + 100 + n * 15 + 6, band[bandIdx].bandwidthIdx);    // table index (direct position) of bandwidth
+-  EEPROM.write(eeprom_address + 100 + n * 15 + 7, savenum);                       //存储当前电台号码
++  EEPROM.write(eeprom_address + 100 + n * 15 + 7, n);                       //存储当前电台号码
+ 
+   EEPROM.commit();
+   EEPROM.end();
+ }
+ 
+-void readstation(int n)  //读取电台
+-{
+-  EEPROM.begin(EEPROM_SIZE);
+-
+-  bandIdx = EEPROM.read(eeprom_address + 100 + n * 15 + 1);
+-  currentMode = EEPROM.read(eeprom_address + 100 + n * 15 + 2);
+-  band[bandIdx].currentFreq = EEPROM.read(eeprom_address + 100 + n * 15 + 3) << 8;
+-  band[bandIdx].currentFreq |= EEPROM.read(eeprom_address + 100 + n * 15 + 4);
+-  band[bandIdx].currentStepIdx = EEPROM.read(eeprom_address + 100 + n * 15 + 5);
+-  band[bandIdx].bandwidthIdx = EEPROM.read(eeprom_address + 100 + n * 15 + 6);
+-
+-
++bool validSavedMode(uint8_t index, uint8_t mode) {
++  if (index > lastBand || mode > lastBandModeDesc) return false;
++  return (band[index].bandType == FM_BAND_TYPE) == (mode == FM);
++}
++
++// Presets and receiver bands use the same four-byte tuning record.
++bool readBandSettings(uint8_t index, uint8_t mode, int address) {
++  if (!validSavedMode(index, mode)) return false;
++  Band &entry = band[index];
++  uint16_t frequency = (EEPROM.read(address) << 8) | EEPROM.read(address + 1);
++  uint8_t step = EEPROM.read(address + 2);
++  uint8_t width = EEPROM.read(address + 3);
++  int maxStep = lastSwStep;
++  if (entry.bandType == FM_BAND_TYPE) maxStep = lastFmStep;
++  if (entry.bandType == MW_BAND_TYPE) maxStep = lastAmStep;
++  int maxWidth = lastBandwidthAM;
++  if (mode == FM) maxWidth = lastBandwidthFM;
++  if (mode == LSB || mode == USB) maxWidth = lastBandwidthSSB;
++  if (frequency < entry.minimumFreq || frequency > entry.maximumFreq ||
++      step > maxStep || width > maxWidth) return false;
++  entry.currentFreq = frequency;
++  entry.currentStepIdx = step;
++  entry.bandwidthIdx = width;
++  return true;
++}
++
++void readstation(int n)
++{
++  if (n < 1 || n > storenumber || !EEPROM.begin(EEPROM_SIZE)) return;
++  int base = eeprom_address + 100 + n * 15;
++  uint8_t savedBand = EEPROM.read(base + 1);
++  uint8_t savedMode = EEPROM.read(base + 2);
++  bool valid = EEPROM.read(base + 7) == n && readBandSettings(savedBand, savedMode, base + 3);
+   EEPROM.end();
++  if (!valid) return;
++  bandIdx = savedBand;
++  currentMode = savedMode;
++  if (currentMode != USB && currentMode != LSB) ssbLoaded = false;
+ 
+   currentFrequency = band[bandIdx].currentFreq;
+ 
+   if (band[bandIdx].bandType == FM_BAND_TYPE) {
+     currentStepIdx = idxFmStep = band[bandIdx].currentStepIdx;
+     rx.setFrequencyStep(tabFmStep[currentStepIdx]);
++  } else if (band[bandIdx].bandType == SW_BAND_TYPE) {
++    currentStepIdx = idxSwStep = band[bandIdx].currentStepIdx;
++    rx.setFrequencyStep(tabSwStep[currentStepIdx]);
+   } else {
+     currentStepIdx = idxAmStep = band[bandIdx].currentStepIdx;
+     rx.setFrequencyStep(tabAmStep[currentStepIdx]);
+@@ -585,11 +628,11 @@
+   delay(50);
+ }
+ 
+-void saveAllReceiverInformation()  //writes the conrrent receiver information into the eeprom.
++bool saveAllReceiverInformation()  // Commit header and band records together.
+ {
+   int addr_offset;
+ 
+-  EEPROM.begin(EEPROM_SIZE);
++  if (!EEPROM.begin(EEPROM_SIZE)) return false;
+ 
+   EEPROM.write(eeprom_address, app_id);              // stores the app id;
+   EEPROM.write(eeprom_address + 1, rx.getVolume());  // stores the current Volume
+@@ -600,12 +643,11 @@
+   EEPROM.write(eeprom_address + 6, currentBFO & 0XFF);
+   EEPROM.write(eeprom_address + 7, brightness);
+   EEPROM.write(eeprom_address + 8, lcdofftime);
++  EEPROM.write(eeprom_address + 12, DISPLAY_SETTINGS_VERSION);
+   EEPROM.write(eeprom_address + 9, cmdseek ? 1 : 0);  //存储 搜索
+   //if(!cmdseek) EEPROM.write(eeprom_address + 79,0);
+   //电池校准系数 10
+ 
+-
+-  EEPROM.commit();
+ 
+   addr_offset = 15;
+   band[bandIdx].currentFreq = currentFrequency;
+@@ -615,36 +657,46 @@
+     EEPROM.write(addr_offset++, (band[i].currentFreq & 0xFF));  // stores the current Frequency LOW byte for the band
+     EEPROM.write(addr_offset++, band[i].currentStepIdx);        // Stores current step of the band
+     EEPROM.write(addr_offset++, band[i].bandwidthIdx);          // table index (direct position) of bandwidth
+-    EEPROM.commit();
+-  }
+-
++  }
++
++  bool saved = EEPROM.commit();
+   EEPROM.end();
+-}
+-
+-void readAllReceiverInformation()  //reads the last receiver status from eeprom.
+-{
+-  uint8_t volume;
+-  int addr_offset;
++  return saved;
++}
++
++void readAllReceiverInformation()
++{
+   int bwIdx;
+-  EEPROM.begin(EEPROM_SIZE);
+-
+-  volume = EEPROM.read(eeprom_address + 1);  // Gets the stored volume;
+-  bandIdx = EEPROM.read(eeprom_address + 2);
+-  fmRDS = EEPROM.read(eeprom_address + 3);
+-  currentMode = EEPROM.read(eeprom_address + 4);
++  rx.setVolume(volume);
++  if (!EEPROM.begin(EEPROM_SIZE)) return;
++  uint16_t calibration = (EEPROM.read(eeprom_address + 10) << 8) | EEPROM.read(eeprom_address + 11);
++  if (calibration > 0 && calibration <= 10000) CONV_FACTOR = calibration / 1000.0;
++  uint8_t savedBand = EEPROM.read(eeprom_address + 2);
++  uint8_t savedMode = EEPROM.read(eeprom_address + 4);
++  uint8_t savedVolume = EEPROM.read(eeprom_address + 1);
++  // Older images also set app_id after a preset save, even with an empty receiver header.
++  if (EEPROM.read(eeprom_address) != app_id || savedVolume > 63 || !validSavedMode(savedBand, savedMode)) {
++    EEPROM.end();
++    Serial.println("[ZH-TW 0.2.1] settings=defaults");
++    return;
++  }
++  bandIdx = savedBand;
++  currentMode = savedMode;
++  fmRDS = EEPROM.read(eeprom_address + 3) == 1;
+   currentBFO = EEPROM.read(eeprom_address + 5) << 8;
+   currentBFO |= EEPROM.read(eeprom_address + 6);
+-  brightness = EEPROM.read(eeprom_address + 7);
+-  lcdofftime = EEPROM.read(eeprom_address + 8);
+-  cmdseek = bool((EEPROM.read(eeprom_address + 9)));
+-  //电池校准系数 10
+-
+-  addr_offset = 15;
++  // Preserve radio settings from v0.1, and start its first upgraded boot fully lit.
++  if (EEPROM.read(eeprom_address + 12) == DISPLAY_SETTINGS_VERSION) {
++    uint8_t savedLevel = EEPROM.read(eeprom_address + 7);
++    uint8_t savedTimeout = EEPROM.read(eeprom_address + 8);
++    if (savedLevel >= MIN_BACKLIGHT) brightness = savedLevel;
++    if (savedTimeout <= 99) lcdofftime = savedTimeout;
++  }
++  cmdseek = EEPROM.read(eeprom_address + 9) == 1;
+   for (int i = 0; i <= lastBand; i++) {
+-    band[i].currentFreq = EEPROM.read(addr_offset++) << 8;
+-    band[i].currentFreq |= EEPROM.read(addr_offset++);
+-    band[i].currentStepIdx = EEPROM.read(addr_offset++);
+-    band[i].bandwidthIdx = EEPROM.read(addr_offset++);
++    uint8_t mode = (band[i].bandType == FM_BAND_TYPE) ? FM : AM;
++    if (i == bandIdx) mode = currentMode;
++    readBandSettings(i, mode, eeprom_address + 15 + 4 * i);
+   }
+ 
+   EEPROM.end();
+@@ -689,7 +741,7 @@
+     sprintf(bfo, "%4.4d", currentBFO);
+ 
+   delay(50);
+-  rx.setVolume(volume);
++  rx.setVolume(savedVolume);
+ }
+ 
+ void resetEepromDelay()  //To store any change into the EEPROM, it is needed at least STORE_TIME  milliseconds of inactivity.
+@@ -758,7 +810,7 @@
+   if (agcNdx == 0 && agcIdx == 0)
+     strcpy(sAgc, "AGC ON");
+   else
+-    sprintf(sAgc, "衰减: %2.2d", agcNdx);
++    sprintf(sAgc, "衰減: %2.2d", agcNdx);
+ 
+   drawSprite();
+ }
+@@ -809,7 +861,7 @@
+       rx.setSSB(band[bandIdx].minimumFreq, band[bandIdx].maximumFreq, band[bandIdx].currentFreq, tabSwStep[band[bandIdx].currentStepIdx], currentMode);
+       rx.setSSBAutomaticVolumeControl(1);
+       rx.setSsbSoftMuteMaxAttenuation(softMuteMaxAttIdx);  // Disable Soft Mute for SSB
+-      bwIdxSSB = band[bandIdx].bandwidthIdx;
++      bwIdxSSB = min(static_cast<int>(band[bandIdx].bandwidthIdx), lastBandwidthSSB);
+       rx.setSSBAudioBandwidth(bandwidthSSB[bwIdxSSB].idx);
+     } else {
+       currentMode = AM;
+@@ -989,7 +1041,9 @@
+ 
+         spr.fillSmoothRoundRect(80, 40, 160, 40, 4, TFT_WHITE);
+         spr.fillSmoothRoundRect(81, 41, 158, 38, 4, TFT_MENU_BACK);
+-        spr.drawString("Loading SSB", 160, 62, 4);
++        spr.loadFont(TraditionalChinese16);
++        spr.drawString("載入 SSB 中", 160, 62);
++        spr.unloadFont();
+         spr.pushSprite(0, 0);
+ 
+         loadSSB();
+@@ -1007,7 +1061,9 @@
+ 
+         spr.fillSmoothRoundRect(80, 40, 160, 40, 4, TFT_WHITE);
+         spr.fillSmoothRoundRect(81, 41, 158, 38, 4, TFT_MENU_BACK);
+-        spr.drawString("Loading SSB", 160, 62, 4);
++        spr.loadFont(TraditionalChinese16);
++        spr.drawString("載入 SSB 中", 160, 62);
++        spr.unloadFont();
+         spr.pushSprite(0, 0);
+ 
+         loadSSB();
+@@ -1046,7 +1102,7 @@
+   for (int i = 1; i <= storenumber; i++) {
+     value = EEPROM.read(eeprom_address + 100 + i * 15 + 7);  //将存储的savenum 读取出
+ 
+-    if (value != 255)  //初始化默认255
++    if (value == i)
+     {
+       count_station++;
+       station[count_station] = value;
+@@ -1092,13 +1148,12 @@
+   spr.fillSprite(TFT_BLACK);
+   //spr.setTextColor(TFT_WHITE, TFT_BLACK);
+   spr.setTextDatum(ML_DATUM);
+-  spr.loadFont(HanYiZhongYuanJian16);
+-
+-  spr.drawString("嘉立创 你别失望 开源 ", 1, 10);
++  spr.loadFont(TraditionalChinese16);
++
++  spr.drawString("原始硬體：Sunnygold", 1, 10);
+   spr.drawString("oshwhub.com/sunnygold", 1, 30);
+-  spr.drawString("软件 汉化 改进 :zooc", 1, 50);
+-  spr.drawString(" ", 1, 70);
+-  spr.drawString("QQ群:854656412", 1, 90);
++  spr.drawString("繁體中文漢化與改進：＠maxxtang(Github)", 1, 50);
++  spr.drawString("繁體中文漢化：0.2.1", 1, 70);
+   spr.drawFloat(CONV_FACTOR,10, 100,130);
+ 
+   spr.unloadFont();
+@@ -1109,27 +1164,16 @@
+ 
+ void dobright(int8_t v)  //调节亮度
+ {
+-
+-  if (brightness < 1) { brightness = 1; }
+-  if (brightness > 255) { brightness = 255; }
+-
+-  if (v == 1) {
+-    brightness = brightness - 5;
+-    ledcWrite(0, brightness);
+-    drawSprite();
+-
+-  } else {
+-    brightness = brightness + 5;
+-    ledcWrite(0, brightness);
+-    drawSprite();
+-  }
++  int next = brightness + (v == 1 ? -5 : 5);
++  brightness = constrain(next, static_cast<int>(MIN_BACKLIGHT), 255);
++  setBacklight(brightness);
++  drawSprite();
+ }
+ 
+ void sellcdofftime(int8_t v)  //自动熄屏时间调节 0-99
+ {
+-  if (v == -1) lcdofftime++;
+-  if (lcdofftime > 99) lcdofftime = 1;
+-  else if (v == 1) lcdofftime--;
++  lcdofftime += (v == -1) ? 1 : -1;
++  if (lcdofftime > 99) lcdofftime = 0;
+   if (lcdofftime < 0) lcdofftime = 99;
+ 
+   drawSprite();
+@@ -1138,26 +1182,16 @@
+ void checkScreenTimeout()  //检查屏幕超时 如果超过自动熄屏时间 熄屏 在按键编码器事件中通过 lcdoff(false)复位
+ {
+   unsigned long currentTime = millis();
+-  if (lcdofftime != 0 && (currentTime - lastActiveTime > lcdofftime * 1000)) {  //lcdoff(false) &&
++  if (!lcdoffed && lcdofftime > 0 && currentTime - lastActiveTime >= lcdofftime * 1000UL) {
+     lcdoff(true);
+   }
+ }
+ 
+ void lcdoff(bool off)  //控制屏幕亮灭 控制lcdoffed变量
+ {
+-  if (off) {
+-    ledcWrite(0, 0); //背光关闭
+-    //digitalWrite(TFT_PWR, LOW);
+-    //adc_digi_stop();
+-    lcdoffed = true;
+-  }  //关闭背光
+-  else {
+-    ledcWrite(0, brightness);
+-    //adc_digi_start();
+-    //pinMode(21, INPUT_PULLUP);
+-    delay(200);        //if (currentTime  - lcdondelaytime >1000 )
+-    lcdoffed = false;  //亮屏后200ms 执行lcdoffed=false
+-  }
++  lcdoffed = off;
++  setBacklight(off ? 0 : brightness);
++  if (!off) drawSprite();
+ }
+ 
+ void showFrequencySeek(uint16_t freq)  //显示频率 This function is called by the seek function process
+@@ -1227,7 +1261,9 @@
+     case selstation:                 //zooc
+       if (readsavednumcount() == 0)  //如果未存储电台 显示提示!
+       {
+-        tft.drawString("no station saved!", 110, 90, 2);  //在rds位置显示调试数据
++        tft.loadFont(TraditionalChinese16);
++        tft.drawString("尚未儲存電台", 110, 90);
++        tft.unloadFont();  //在rds位置显示调试数据
+         delay(1000);
+       } else {
+         cmdselstation = true;
+@@ -1317,7 +1353,7 @@
+   if (currentMode != FM) {
+     //dBuV to S point conversion HF
+     if ((rssi >= 0) and (rssi <= 1)) return 1;    // S0
+-    if ((rssi > 1) and (rssi <= 1)) return 2;     // S1
++    if ((rssi > 1) and (rssi <= 2)) return 2;     // S1
+     if ((rssi > 2) and (rssi <= 3)) return 3;     // S2
+     if ((rssi > 3) and (rssi <= 4)) return 4;     // S3
+     if ((rssi > 4) and (rssi <= 10)) return 5;    // S4
+@@ -1335,7 +1371,7 @@
+     if (rssi > 95) return 17;                     //>S9 +60
+   } else {
+     //dBuV to S point conversion FM
+-    if (rssi < 1) return 1;
++    if (rssi <= 1) return 1;
+     if ((rssi > 1) and (rssi <= 2)) return 7;     // S6
+     if ((rssi > 2) and (rssi <= 8)) return 8;     // S7
+     if ((rssi > 8) and (rssi <= 14)) return 9;    // S8
+@@ -1349,6 +1385,7 @@
+     if (rssi > 76) return 17;                     //>S9 +60
+     // newStereoPilot=si4735.getCurrentPilot();
+   }
++  return 1;
+ }
+ 
+ void drawMenu() {
+@@ -1357,8 +1394,8 @@
+     spr.fillSmoothRoundRect(2, 2, 74, 108, 4, TFT_MENU_BACK);
+     spr.setTextColor(TFT_WHITE, TFT_MENU_BACK);
+     //菜单自定义字体
+-    spr.loadFont(HanYiZhongYuanJian16);
+-    spr.drawString("菜单", 38, 14);  //2
++    spr.loadFont(TraditionalChinese16);
++    spr.drawString("選單", 38, 14);  //2
+     spr.unloadFont();
+     spr.setTextFont(0);
+     spr.setTextColor(0xBEDF, TFT_MENU_BACK);
+@@ -1367,7 +1404,7 @@
+       if (i == 0) spr.setTextColor(0xBEDF, 0x105B);
+       else spr.setTextColor(0xBEDF, TFT_MENU_BACK);
+       //自定义
+-      spr.loadFont(HanYiZhongYuanJian16);
++      spr.loadFont(TraditionalChinese16);
+       spr.drawString(menu[abs((menuIdx + lastMenu + 1 + i) % (lastMenu + 1))], 38, 64 + (i * 16));
+       spr.unloadFont();
+     }
+@@ -1376,7 +1413,7 @@
+     spr.fillSmoothRoundRect(1, 1, 76, 110, 4, TFT_RED);
+     spr.fillSmoothRoundRect(2, 2, 74, 108, 4, TFT_MENU_BACK);
+     //
+-    spr.loadFont(HanYiZhongYuanJian16);
++    spr.loadFont(TraditionalChinese16);
+     spr.drawString(menu[menuIdx], 38, 14);
+     spr.unloadFont();
+     //
+@@ -1427,12 +1464,18 @@
+     if (cmdbright) {
+       spr.setTextColor(0xBEDF, TFT_MENU_BACK);
+       spr.fillRoundRect(6, 24 + (2 * 16), 66, 16, 2, TFT_MENU_BACK);
+-      spr.drawNumber(brightness / 2.56, 38, 60, 7);  //1-255  /2.56 百分比算
++      spr.drawNumber((brightness * 100 + 127) / 255, 38, 60, 4);
+     }
+     if (cmdautolcdoff) {
+       spr.setTextColor(0xBEDF, TFT_MENU_BACK);
+       spr.fillRoundRect(6, 24 + (2 * 16), 66, 16, 2, TFT_MENU_BACK);
+-      spr.drawNumber(lcdofftime, 38, 60, 7);  //1-255  /2.56 百分比算
++      if (lcdofftime == 0) {
++        spr.loadFont(TraditionalChinese16);
++        spr.drawString("常亮", 38, 60);
++        spr.unloadFont();
++      } else {
++        spr.drawNumber(lcdofftime, 38, 60, 7);
++      }
+     }
+     if (cmdsave) {
+       //增加已存储判断
+@@ -1460,7 +1503,9 @@
+       if (agcNdx == 0 && agcIdx == 0) {
+         spr.setFreeFont(&Orbitron_Light_24);
+         spr.drawString("AGC", 38, 48);
+-        spr.drawString("On", 38, 72);
++        spr.loadFont(TraditionalChinese16);
++        spr.drawString("開啟", 38, 72);
++        spr.unloadFont();
+         spr.setTextFont(1);
+       } else {
+         sprintf(sAgc, "%2.2d", agcNdx);
+@@ -1510,20 +1555,20 @@
+     spr.fillSmoothRoundRect(leftrect_x+1, leftrect_y+space*3+1,rect_w-2, rect_h-2, 4, TFT_MENU_BACK);
+ 
+     //zooc 自定义字体 通过用到的汉字取模后保存h文件，存档在ino同目录，在ino文件中引用 通过loadfont 和 unloadfont 使用字体
+-    spr.loadFont(HanYiZhongYuanJian16);
++    spr.loadFont(TraditionalChinese16);
+     //spr.setTextColor(spr.color565(200, 200, 200), TFT_MENU_BACK);  //主界面汉字标题部分字体颜色
+     //spr.drawString("波段:",5,65+(-3*16));
+     //spr.drawString("模式:",5,65+(-2*16));
+-    spr.drawString("步进", leftrect_x+20, leftrect_y+12);
+-    spr.drawString("带宽", leftrect_x+20, leftrect_y+12+space);
++    spr.drawString("步進", leftrect_x+20, leftrect_y+12);
++    spr.drawString("頻寬", leftrect_x+20, leftrect_y+12+space);
+ 
+     if (agcNdx == 0 && agcIdx == 0) {
+-      spr.loadFont(HanYiZhongYuanJian16);  spr.drawString("增益", leftrect_x+20, leftrect_y+12+space*2);  spr.unloadFont();
++      spr.loadFont(TraditionalChinese16);  spr.drawString("增益", leftrect_x+20, leftrect_y+12+space*2);  spr.unloadFont();
+       //spr.setTextColor(TFT_WHITE, TFT_BLACK);
+       spr.loadFont(NotoMono16);  spr.drawString("ON", leftrect_x+57, leftrect_y+13+space*2, 2);  spr.unloadFont();
+     } else {
+       sprintf(sAgc, "%2.2d", agcNdx);
+-      spr.loadFont(HanYiZhongYuanJian16); spr.drawString("衰减", leftrect_x+20, leftrect_y+12+space*2);   spr.unloadFont();
++      spr.loadFont(TraditionalChinese16); spr.drawString("衰減", leftrect_x+20, leftrect_y+12+space*2);   spr.unloadFont();
+       //spr.setTextColor(TFT_WHITE, TFT_BLACK);
+       spr.loadFont(NotoMono16);  spr.drawString(sAgc, leftrect_x+57, leftrect_y+13+space*2, 2);  spr.unloadFont();
+     }
+@@ -1670,19 +1715,19 @@
+     spr.unloadFont();
+   }
+ 
+-  spr.loadFont(HanYiZhongYuanJian16);
++  spr.loadFont(TraditionalChinese16);
+   if (cmdseek & !isMenuMode() & !cmdBand) 
+   {
+     //spr.pushImage(3, 0, 18, 18, seek); 
+     spr.pushImage(leftrect_x+50, leftrect_y+2+space*3, 18, 18, seek);
+-    spr.drawString("搜索", leftrect_x+20, leftrect_y+12+space*3); //搜索模式显示图标 菜单不显示
++    spr.drawString("搜台", leftrect_x+20, leftrect_y+12+space*3); //搜索模式显示图标 菜单不显示
+ 
+   }  
+   if (!cmdseek & !isMenuMode() & !cmdBand) 
+   {
+    // spr.pushImage(3, 0, 18, 18, plus);
+     spr.pushImage(leftrect_x+50, leftrect_y+2+space*3, 18, 18, plus);
+-    spr.drawString("频率", leftrect_x+20, leftrect_y+12+space*3); //搜索模式显示图标 菜单不显示
++    spr.drawString("頻率", leftrect_x+20, leftrect_y+12+space*3); //搜索模式显示图标 菜单不显示
+ 
+   }
+   spr.unloadFont();
+@@ -1855,62 +1900,52 @@
+ 
+ ///////////////////////////////////////////主循环loop//////////////////////////////////////////////////////////////
+ void loop() {
++  if (Serial.available() && Serial.read() == '?') {
++    Serial.printf("[ZH-TW 0.2.1] status uptime_ms=%lu mode=%s freq=%u rssi=%u psram=%u "
++                  "screen_on=%d brightness=%u auto_off_s=%d backlight=%s menu=%d menu_idx=%d\n",
++                  millis(), bandModeDesc[currentMode], currentFrequency, rssi, ESP.getPsramSize(),
++                  !lcdoffed, brightness, lcdofftime, backlightPwmActive ? "PWM" : "GPIO", cmdMenu, menuIdx);
++  }
+   
+   checkScreenTimeout();                                             //检查操作超时
+   if ((currentMode == LSB || currentMode == USB)) cmdseek = false;  // 单边带不支持搜索?
+ 
+   //runEvery(test1, 5000, []() {rx.volumeDown();}); // 自动捕获外部变量
+ 
+- if (lcdoffed) //熄屏进入浅睡眠
+- {
+-    tft.writecommand(0x10); //屏幕睡眠
+-    setCpuFrequencyMhz(80);
+-    //配置唤醒源，当引脚检测到高电平时唤醒
+-    pinMode(1, INPUT_PULLUP); // 启用内部上拉电阻
+-    //pinMode(2, INPUT_PULLUP); // 启用内部上拉电阻
+-    //(1ULL << BUTTON1_PIN) | (1ULL << BUTTON2_PIN)
+-    //esp_sleep_enable_ext1_wakeup( (1ULL << GPIO_NUM_1) | (1ULL << GPIO_NUM_2), ESP_EXT1_WAKEUP_ANY_LOW);
+-    esp_sleep_enable_ext0_wakeup(GPIO_NUM_1, LOW);
+-    esp_light_sleep_start();
+- }
+- else
+- {
+-    tft.writecommand(0x11); // 退出睡眠
+-    setCpuFrequencyMhz(240);
+- }
+-  
+-  event = getButtonEvent(21);
++  event = getButtonEvent(ENCODER_PUSH_BUTTON);
++  // While blank, the first knob gesture only lights the screen.
++  if (lcdoffed && (event || encoderCount)) {
++    encoderCount = 0;
++    event = 0;
++    lastActiveTime = millis();
++    lcdoff(false);
++  }
+ 
+   if (event == 1) {
+-    if (!lcdoffed)  //亮屏状态执行单机操作
+-    {
+-      if (cmdsave) {
+-        savestation(savenum);
+-        cmdsave = false;
+-      } else if (cmdMenu) {
+-        currentMenuCmd = menuIdx;
+-        doCurrentMenuCmd();
+-      } else if (isMenuMode()) {
+-        disableCommands();
+-        showStatus();
+-        showCommandStatus((char *)"VFO ");
+-      } else if (bfoOn) {
+-        bfoOn = false;
+-        showStatus();
+-      } else {
+-        cmdBand = !cmdBand;
+-        menuIdx = BAND;
+-        currentMenuCmd = menuIdx;
+-        drawSprite();
+-      }
+-    }
+-    if (lcdoffed) { lcdoff(false); }  //熄屏只执行亮屏操作
++    if (cmdsave) {
++      savestation(savenum);
++      cmdsave = false;
++    } else if (cmdMenu) {
++      currentMenuCmd = menuIdx;
++      doCurrentMenuCmd();
++    } else if (isMenuMode()) {
++      disableCommands();
++      showStatus();
++      showCommandStatus((char *)"VFO ");
++    } else if (bfoOn) {
++      bfoOn = false;
++      showStatus();
++    } else {
++      cmdBand = !cmdBand;
++      menuIdx = BAND;
++      currentMenuCmd = menuIdx;
++      drawSprite();
++    }
+     lastActiveTime = millis();
+     resetEepromDelay();
+   }
+ 
+   if (event == 2) {
+-    if (lcdoffed) { lcdoff(false); }
+     cmdMenu = !cmdMenu;
+     if (cmdMenu) drawSprite();
+     lastActiveTime = millis();
+@@ -1918,10 +1953,11 @@
+   }
+ 
+   if (event == 3) {
+-    if (lcdoffed) { lcdoff(false); }
+     if (readsavednumcount() == 0)  //如果未存储电台 显示提示! zooc
+     {
+-      tft.drawString("no station saved!", 110, 90, 2);  //在rds位置显示调试数据
++      tft.loadFont(TraditionalChinese16);
++        tft.drawString("尚未儲存電台", 110, 90);
++        tft.unloadFont();  //在rds位置显示调试数据
+       delay(1000);
+     } else {
+       menuIdx = selstation;
+@@ -1951,7 +1987,6 @@
+ 
+   if (event == 5)  // 长按
+   {
+-    lcdoff(false);
+     if ((currentMode == LSB || currentMode == USB)) cmdseek = false;
+     else { cmdseek = !cmdseek; }
+     drawSprite();
+@@ -1979,7 +2014,7 @@
+   //   }                            //按压旋转 调节音量 在按键函数中 屏蔽按键和长按 checkButtonPress(21, 50, 0, 20)
+   // } 
+   
+-  if (encoderCount != 0)  //转动编码器
++  if (encoderCount != 0 && !lcdoffed)  //转动编码器
+   {
+     if (bfoOn & (currentMode == LSB || currentMode == USB)) {
+       currentBFO = (encoderCount == 1) ? (currentBFO + currentBFOStep) : (currentBFO - currentBFOStep);
+@@ -1996,13 +2031,13 @@
+     else if (cmdbright) dobright(encoderCount);
+     else if (cmdsave) dosavestation(encoderCount);
+     else if (cmdautolcdoff) sellcdofftime(encoderCount);
+-    else if (cmdselstation & !lcdoffed) doselstation(encoderCount);
+-    else if (cmdseek & !lcdoffed) doSeek(encoderCount);
++    else if (cmdselstation) doselstation(encoderCount);
++    else if (cmdseek) doSeek(encoderCount);
+     else {
+       //autostep();  //自动步进 临时测试 未优化
+ 
+-      if (encoderCount == 1 & !lcdoffed) rx.frequencyDown();
+-      else if (encoderCount == -1 & !lcdoffed) rx.frequencyUp();
++      if (encoderCount == 1) rx.frequencyDown();
++      else if (encoderCount == -1) rx.frequencyUp();
+ 
+       if (currentMode == FM) cleanBfoRdsInfo();
+       // Show the current frequency only if it has changed
+@@ -2010,7 +2045,6 @@
+       showFrequency();
+     }
+ 
+-    if (lcdoffed) { lcdoff(false); }
+     lastActiveTime = millis();
+     encoderCount = 0;
+     resetEepromDelay();
+@@ -2064,9 +2098,8 @@
+   if (itIsTimeToSave)  //存储用户配置
+   {
+     if ((millis() - storeTime) > STORE_TIME) {
+-      saveAllReceiverInformation();
++      itIsTimeToSave = !saveAllReceiverInformation();
+       storeTime = millis();
+-      itIsTimeToSave = false;
+     }
+   }
+ 
+--- upstream/Battery.cpp
++++ firmware/Si4732Traditional/Battery.cpp
+@@ -37,6 +37,7 @@
+     
+ 
+   
++  return 0.0; // No ADC sample when disabled.
+ }
+ 
+ // void stopADC(uint8_t pin) {

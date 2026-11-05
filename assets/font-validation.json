@@ -1,0 +1,36 @@
+{
+  "font": "NotoSansMonoCJKtc-Regular.otf",
+  "glyph_count": 158,
+  "cjk_glyphs": 64,
+  "font_bytes": 24743,
+  "line_height": 16,
+  "missing_glyphs": [],
+  "height_adjusted_glyphs": [
+    "j",
+    "|"
+  ],
+  "menu_widths": {
+    "音量": 30,
+    "步進": 30,
+    "模式": 30,
+    "拍頻": 30,
+    "頻寬": 30,
+    "增益": 30,
+    "軟靜音": 45,
+    "波段": 30,
+    "靜音": 30,
+    "亮度": 30,
+    "關於": 30,
+    "儲存電台": 60,
+    "讀取電台": 60,
+    "自動熄屏": 60
+  },
+  "max_menu_width": 66,
+  "about_widths": {
+    "原始硬體：Sunnygold": 147,
+    "oshwhub.com/sunnygold": 168,
+    "繁體中文漢化與改進：＠maxxtang(Github)": 293,
+    "繁體中文漢化：0.2.1": 145
+  },
+  "preview": "font/layout preview only; not a hardware screenshot"
+}

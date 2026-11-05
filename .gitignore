@@ -1,0 +1,15 @@
+.dev/
+upstream/
+backups/
+dist/
+__pycache__/
+validation/*-flash/
+.DS_Store
+firmware/**/build/
+/FLASH-*.md
+/*-build.zip
+.env
+.env.*
+/vendor/PU2CLR_SI4735/google*.html
+/vendor/PU2CLR_SI4735/_config.yml
+/vendor/PU2CLR_SI4735/_includes/

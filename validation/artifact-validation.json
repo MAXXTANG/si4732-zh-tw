@@ -1,0 +1,81 @@
+{
+  "version": "0.2.1",
+  "change": "About credits",
+  "application_image_bytes": 512576,
+  "application_sha256": "408fa77c3d6dfb72aed6ad949eb4f480e8f9b270056096746b5b266cf18ec13e",
+  "merged_image_bytes": 16777216,
+  "merged_sha256": "4d3439ad33b548701304d4ef5ad0c36ec29868bc2ab9ec27402f844929ffb4a6",
+  "merged_segments_verified": true,
+  "flashed": true,
+  "flashed_region": "application at 0x10000",
+  "flash_verified": true,
+  "hardware_boot_tested": true,
+  "runtime_continuous_through_ms": 22025,
+  "runtime_reports": 19,
+  "panic_observed": false,
+  "psram_confirmed_bytes": 8388608,
+  "radio_i2c_address": "0x63",
+  "traditional_strings_in_binary": true,
+  "fullwidth_at_in_font": true,
+  "qq_contact_removed_from_application": true,
+  "about_layout_verified": true,
+  "about_lines": [
+    {
+      "text": "原始硬體：Sunnygold",
+      "advance_px": 147,
+      "ink_bounds": [
+        1,
+        2,
+        147,
+        18
+      ]
+    },
+    {
+      "text": "oshwhub.com/sunnygold",
+      "advance_px": 168,
+      "ink_bounds": [
+        1,
+        22,
+        168,
+        38
+      ]
+    },
+    {
+      "text": "繁體中文漢化與改進：＠maxxtang(Github)",
+      "advance_px": 293,
+      "ink_bounds": [
+        1,
+        42,
+        292,
+        58
+      ]
+    },
+    {
+      "text": "繁體中文漢化：0.2.1",
+      "advance_px": 145,
+      "ink_bounds": [
+        1,
+        62,
+        145,
+        77
+      ]
+    }
+  ],
+  "vendored_files_match_pinned_upstream": true,
+  "physical_about_confirmed": true,
+  "physical_display_confirmed": true,
+  "physical_audio_confirmed": null,
+  "physical_controls_confirmed": true,
+  "previous_build": {
+    "application_sha256": "a1f1b6069107519d6647ad12327bbb8876f5a2ff7e8001668f65804caf21b340",
+    "physical_display_confirmed": true,
+    "physical_controls_confirmed": true,
+    "physical_audio_confirmed": true,
+    "settings_regression_passed": true
+  },
+  "acceptance_status": "User confirmed both requested About lines are correct on this receiver and the QQ row is gone.",
+  "core": "esp32:esp32@3.3.12",
+  "arduino_cli": "1.5.1",
+  "upstream_commit": "5334e7bc5e44a7b66bbbbd5183164147ec5f8641",
+  "physical_control_scope": "Reached the About menu with the rotary encoder."
+}

@@ -1,0 +1,10 @@
+In file included from vendor/TFT_eSPI/TFT_eSPI.h:97,
+                 from firmware/Si4732Traditional/Si4732Traditional.ino:2:
+vendor/TFT_eSPI/Processors/TFT_eSPI_ESP32_S3.h:111:3: warning: #warning >>>>------>> DMA is not supported in parallel mode [-Wcpp]
+  111 |  #warning >>>>------>> DMA is not supported in parallel mode
+      |   ^~~~~~~
+vendor/TFT_eSPI/TFT_eSPI.h:977:8: warning: #warning >>>>------>> TOUCH_CS pin not defined, TFT_eSPI touch functions will not be available! [-Wcpp]
+  977 |       #warning >>>>------>> TOUCH_CS pin not defined, TFT_eSPI touch functions will not be available!
+      |        ^~~~~~~
+Sketch uses 512427 bytes (16%) of program storage space. Maximum is 3145728 bytes.
+Global variables use 29340 bytes (8%) of dynamic memory, leaving 298340 bytes for local variables. Maximum is 327680 bytes.

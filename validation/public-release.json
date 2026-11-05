@@ -1,0 +1,53 @@
+{
+  "version": "0.2.1",
+  "arduino_cli": "1.5.1",
+  "esp32_arduino_core": "3.3.12",
+  "upstream_commit": "5334e7bc5e44a7b66bbbbd5183164147ec5f8641",
+  "hardware_tested_application_sha256": "408fa77c3d6dfb72aed6ad949eb4f480e8f9b270056096746b5b266cf18ec13e",
+  "public_application_sha256": "6182aaaac248ee67595e0e85c018accd031819d8f178b6bcba53b624a8ddf546",
+  "public_application_bytes": 512576,
+  "application_header_and_segment_layout_match": true,
+  "matching_executable_segments": [
+    {
+      "address": "0x40374000",
+      "bytes": 6668,
+      "sha256": "9538b9e9754a15b3b175c565eadf6c7a2220e97b1b793d3c284af70565589dc8"
+    },
+    {
+      "address": "0x42000020",
+      "bytes": 248324,
+      "sha256": "52d2447b93c55fe45e7d2002646e3f7975234172217ad87860df5181a5758f26"
+    },
+    {
+      "address": "0x40375a0c",
+      "bytes": 67520,
+      "sha256": "ffa515f4efba78531fa718546a9beb1a05c6c6af75dfabc723549d6e6c9762ea"
+    }
+  ],
+  "identical_executable_bytes": 322512,
+  "all_other_differences": [
+    "3 SDK assertion source paths",
+    "Arduino core build date and time",
+    "embedded ELF SHA-256",
+    "ESP image checksum and SHA-256"
+  ],
+  "matching_images": [
+    "Si4732Traditional.ino.bootloader.bin",
+    "Si4732Traditional.ino.partitions.bin",
+    "boot_app0.bin"
+  ],
+  "public_application_image_checksum": "valid",
+  "public_application_image_digest": "valid",
+  "public_merged_bytes": 16777216,
+  "merged_image_only_contains_build_outputs_and_erased_space": true,
+  "public_image_flashed": false,
+  "archive": "si4732-zh-tw-0.2.1-firmware.zip",
+  "archive_sha256": "ce14c9aa84d5f0424be82e53f10191a78e0a77113b847672a443ed1196c97c3a",
+  "archive_firmware_sha256": {
+    "Si4732Traditional.ino.bootloader.bin": "84bb365666003b051f564d04380d0cf5d9d85c420ddafe9fc863071b49e49bfc",
+    "Si4732Traditional.ino.partitions.bin": "ace02503447d0f470692e65fa76002f2d77a92dc81cd3813d8aa66718d716da9",
+    "boot_app0.bin": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0",
+    "Si4732Traditional.ino.bin": "6182aaaac248ee67595e0e85c018accd031819d8f178b6bcba53b624a8ddf546",
+    "Si4732Traditional.ino.merged.bin": "a460379ff6f0a44449e32ebcbdca4a252d3042020b953bfcc2c7c11504b1773f"
+  }
+}

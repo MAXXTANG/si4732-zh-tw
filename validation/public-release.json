@@ -42,12 +42,24 @@
   "merged_image_only_contains_build_outputs_and_erased_space": true,
   "public_image_flashed": false,
   "archive": "si4732-zh-tw-0.2.1-firmware.zip",
-  "archive_sha256": "ce14c9aa84d5f0424be82e53f10191a78e0a77113b847672a443ed1196c97c3a",
+  "archive_sha256": "ddf8b6a106937d5ef5734ce786e93cac582e57fc621686b56d91f435632ba17b",
   "archive_firmware_sha256": {
     "Si4732Traditional.ino.bootloader.bin": "84bb365666003b051f564d04380d0cf5d9d85c420ddafe9fc863071b49e49bfc",
     "Si4732Traditional.ino.partitions.bin": "ace02503447d0f470692e65fa76002f2d77a92dc81cd3813d8aa66718d716da9",
     "boot_app0.bin": "f94c5d786a7a8fab06ac5d10e33bf37711a6697636dc037559ea19cc410a17f0",
     "Si4732Traditional.ino.bin": "6182aaaac248ee67595e0e85c018accd031819d8f178b6bcba53b624a8ddf546",
     "Si4732Traditional.ino.merged.bin": "a460379ff6f0a44449e32ebcbdca4a252d3042020b953bfcc2c7c11504b1773f"
+  },
+  "archive_documentation_update": {
+    "date": "2026-11-05",
+    "original_archive_sha256": "ce14c9aa84d5f0424be82e53f10191a78e0a77113b847672a443ed1196c97c3a",
+    "updated_archive_sha256": "ddf8b6a106937d5ef5734ce786e93cac582e57fc621686b56d91f435632ba17b",
+    "changed_files": [
+      "THIRD_PARTY_NOTICES.md"
+    ],
+    "added_files": [
+      "README.md"
+    ],
+    "all_five_firmware_images_byte_identical": true
   }
 }

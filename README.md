@@ -45,6 +45,8 @@
 
 在發行頁下載 `si4732-zh-tw-0.2.1-firmware.zip` 和同名的 `.sha256`。macOS 可在下載目錄執行下列指令，分別核對 ZIP 與解壓後的五個映像。[v0.2.1 發行頁](https://github.com/MAXXTANG/si4732-zh-tw/releases/tag/v0.2.1)
 
+2026-11-05 已同步下載包的授權說明並加入包內 README。五個韌體映像與最初發行版本逐位元相同；ZIP 校驗值已更新，請搭配此次下載的 `.sha256`。[用語與文件核對紀錄](validation/license-wording-audit.md)
+
 ```sh
 shasum -a 256 -c si4732-zh-tw-0.2.1-firmware.zip.sha256
 unzip si4732-zh-tw-0.2.1-firmware.zip -d si4732-v0.2.1

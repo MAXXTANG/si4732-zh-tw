@@ -41,6 +41,7 @@ def main():
         raise ValueError("Personal build paths found. Rebuild using build.sh before publishing.")
 
     files = dict(images)
+    files["README.md"] = (ROOT / "FIRMWARE_README.md").read_bytes()
     files["SHA256SUMS"] = "".join(f"{sha256(data).hexdigest()}  {name}\n"
                                   for name, data in images.items()).encode()
     files["flash_args"] = (args.build_dir / "flash_args").read_bytes()

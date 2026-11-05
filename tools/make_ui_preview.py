@@ -94,7 +94,7 @@ def tuning_screen(fonts, menu=None):
         pen.rounded_rectangle((1, 1, 76, 110), radius=4, outline="red")
         zh.draw(screen, "選單", 38, 14)
         pen.rounded_rectangle((6, 56, 71, 71), radius=2, fill=rgb565(0x105B))
-        selected = menu.index("關於")
+        selected = menu.index("頻寬")
         for offset in range(-2, 3):
             zh.draw(screen, menu[(selected + offset) % len(menu)], 38, 64 + 16 * offset, rgb565(0xBEDF))
     else:
@@ -143,15 +143,7 @@ def main():
     gfx = ROOT / "vendor/TFT_eSPI/Fonts/Custom/Orbitron_Light_24.h"
     fonts.append(BitmapFont.from_gfx(gfx, "Orbitron_Light_24"))
 
-    about = Image.new("RGB", (320, 170))
-    section = source.split("void doabout(", 1)[1].split("spr.unloadFont();", 1)[0]
-    lines = re.findall(r'spr\.drawString\("([^"]+)",\s*(\d+),\s*(\d+)\)', section)
-    assert len(lines) == 4, "Check the About drawing code"
-    for label, x, y in lines:
-        zh.draw(about, label, int(x), int(y), left=True)
-    zh.draw(about, "1.7100000", 100, 130, left=True, numeric=True)
-
-    for name, screen in [("fm", tuning_screen(fonts)), ("menu", tuning_screen(fonts, menu)), ("about", about)]:
+    for name, screen in [("fm", tuning_screen(fonts)), ("menu", tuning_screen(fonts, menu))]:
         screen.resize((640, 340), Image.Resampling.NEAREST).save(ASSETS / f"ui-{name}.png")
 
 
